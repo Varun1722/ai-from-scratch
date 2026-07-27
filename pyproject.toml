@@ -5,6 +5,7 @@ description = "Learning AI/ML from scratch — notes and code as I work through 
 requires-python = ">=3.12"
 dependencies = [
     "marimo>=0.23.15",
+    "tiktoken>=0.13.0",
     "torch>=2.13.0",
     "torchvision>=0.28.0",
 ]

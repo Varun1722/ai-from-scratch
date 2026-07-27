@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.02 Visualized — Tokenization &amp; Embeddings, step by step</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel2:#1b202a; --border:#262b36;
+    --text:#e6e9ef; --muted:#9aa4b2; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --blue:#5b9dff; --amber:#f0a93b; --red:#ef5b5b; --green:#4cc38a; --purple:#b388f5; --teal:#38c6c6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; line-height:1.5;}
+  header{padding:20px 28px 10px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:20;}
+  header h1{margin:0 0 4px; font-size:20px;}
+  header p{margin:0; color:var(--muted); font-size:13px;}
+  .shared-input{margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .shared-input label{font-size:12px; color:var(--muted); white-space:nowrap;}
+  .shared-input input[type=text]{flex:1; min-width:280px; background:var(--panel2); border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:6px; font-family:var(--mono); font-size:13px;}
+  nav{display:flex; gap:4px; padding:10px 28px 0; border-bottom:1px solid var(--border); overflow-x:auto; background:var(--bg); position:sticky; top:78px; z-index:19;}
+  nav button{background:none; border:none; color:var(--muted); padding:10px 14px; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;}
+  nav button:hover{color:var(--text);}
+  nav button.active{color:var(--blue); border-bottom-color:var(--blue);}
+  main{padding:22px 28px 60px; max-width:1180px; margin:0 auto;}
+  .panel{display:none;}
+  .panel.active{display:block; animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:16px;}
+  .card h2{margin:0 0 6px; font-size:17px;}
+  .card h3{margin:18px 0 8px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .card p{color:var(--muted); font-size:14px; margin:6px 0;}
+  .card p.lead{color:var(--text); font-size:14.5px;}
+  .row{display:flex; gap:16px; flex-wrap:wrap;}
+  .col{flex:1; min-width:260px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; font-family:var(--mono); font-size:13px;}
+  .chip{background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:5px 9px; position:relative;}
+  .chip .sub{display:block; font-size:10px; color:var(--muted); margin-top:2px; text-align:center;}
+  .chip.word{border-color:#2c3d5c;}
+  .chip.punct{border-color:#5c4a20; background:#20190f;}
+  .chip.unk, .chip.oov{border-color:#5c2020; background:#1f1213; color:#ff9b9b;}
+  .chip.target{outline:2px solid var(--green); outline-offset:1px;}
+  .chip.input-hl{background:#152238; border-color:var(--blue);}
+  .chip.dim{opacity:.35;}
+  .chip.empty{opacity:.3; text-decoration:line-through;}
+  .badge{display:inline-block; font-size:11px; padding:2px 7px; border-radius:20px; margin-left:6px; font-family:var(--mono);}
+  .badge.blue{background:#132241; color:var(--blue);}
+  .badge.green{background:#0f2a20; color:var(--green);}
+  .badge.red{background:#2a1414; color:var(--red);}
+  .badge.amber{background:#2a2010; color:var(--amber);}
+  table{border-collapse:collapse; width:100%; font-family:var(--mono); font-size:12.5px;}
+  th,td{padding:5px 8px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap;}
+  th{color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--panel);}
+  .scrollbox{max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:8px;}
+  textarea{width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px; font-family:var(--mono); font-size:12.5px; resize:vertical;}
+  input[type=range]{accent-color:var(--blue);}
+  button.btn{background:var(--panel2); border:1px solid var(--border); color:var(--text); padding:7px 13px; border-radius:6px; cursor:pointer; font-size:13px;}
+  button.btn:hover{border-color:var(--blue); color:var(--blue);}
+  button.btn:disabled{opacity:.4; cursor:default;}
+  .stat{display:inline-flex; flex-direction:column; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 14px; margin-right:10px;}
+  .stat b{font-size:18px;}
+  .stat span{font-size:11px; color:var(--muted); text-transform:uppercase;}
+  details{margin-top:10px;}
+  details summary{cursor:pointer; color:var(--muted); font-size:12.5px;}
+  details pre{background:#0b0d11; border:1px solid var(--border); border-radius:8px; padding:12px; overflow:auto; font-size:12px; color:#c8cdd6;}
+  .note{font-size:12.5px; color:var(--muted); border-left:3px solid var(--border); padding:6px 10px; background:var(--panel2); border-radius:0 6px 6px 0; margin-top:10px;}
+  .note.warn{border-left-color:var(--amber);}
+  .arrow{font-size:20px; color:var(--muted); align-self:center;}
+  .veccell{text-align:right;}
+  .status-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--amber);}
+  .status-dot.ok{background:var(--green);}
+  .status-dot.err{background:var(--red);}
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:20px; border-top:1px solid var(--border);}
+  ::-webkit-scrollbar{height:8px; width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px;}
+  .flow{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  input[type=text].small{background:var(--panel2); border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px; font-family:var(--mono); font-size:12.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Chapter 2, visualized — Working with Text Data</h1>
+  <p>An interactive walkthrough of every transformation in <code>ch02.ipynb</code>: raw text → tokens → IDs → BPE → sliding windows → embeddings. Change the text below and watch every step react.</p>
+  <div class="shared-input">
+    <label for="sharedText">Example sentence (drives steps 2.2–2.6):</label>
+    <input type="text" id="sharedText" value="Hello, do you like tea? &lt;|endoftext|&gt; In the sunlit terraces of someunknownPlace.">
+  </div>
+</header>
+
+<nav id="tabs">
+  <button data-step="s22" class="active">2.2 Tokenizing</button>
+  <button data-step="s23">2.3 Token IDs</button>
+  <button data-step="s24">2.4 Special tokens</button>
+  <button data-step="s25">2.5 BPE (real GPT-2)</button>
+  <button data-step="s26">2.6 Sliding window</button>
+  <button data-step="s27">2.7 Token embeddings</button>
+  <button data-step="s28">2.8 Positional embeddings</button>
+</nav>
+
+<main>
+
+  <!-- 2.2 -->
+  <section class="panel active" id="s22">
+    <div class="card">
+      <h2>2.2 Tokenizing text</h2>
+      <p class="lead">The notebook splits raw text into words and punctuation using one regex: <code>re.split(r'([,.:;?_!"()\']|--|\s)', text)</code>, then strips whitespace and drops empty strings. Nothing clever yet — just breaking the string into pieces.</p>
+
+      <h3>Input (raw string)</h3>
+      <div class="scrollbox" style="max-height:90px;"><table><tr><td id="s22-raw" style="white-space:pre-wrap;"></td></tr></table></div>
+
+      <h3>Step 1 — regex split (delimiters kept, nothing removed yet)</h3>
+      <p>Every comma, period, quote, <code>--</code> and space becomes its own list entry — including empty strings, which is why we filter next.</p>
+      <div class="chips" id="s22-raw-split"></div>
+
+      <h3>Step 2 — after <code>.strip()</code> + drop empties</h3>
+      <div class="chips" id="s22-final"></div>
+      <p><span class="badge blue" id="s22-count"></span> <span class="badge amber">amber = punctuation</span> <span class="badge blue" style="background:#132241;color:var(--blue)">blue = word</span></p>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', raw_text)
+preprocessed = [item.strip() for item in preprocessed if item.strip()]</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.3 -->
+  <section class="panel" id="s23">
+    <div class="card">
+      <h2>2.3 Converting tokens into token IDs</h2>
+      <p class="lead">Build a vocabulary from a training corpus: collect every unique token, sort them, and number them 0..N-1. Below we use the book's own training text, <code>the-verdict.txt</code> (the same file the notebook loads) — so these numbers match the notebook exactly.</p>
+
+      <div class="row">
+        <div class="stat"><b id="s23-tokcount">–</b><span>tokens in corpus</span></div>
+        <div class="stat"><b id="s23-vocabsize">–</b><span>unique vocab words</span></div>
+      </div>
+
+      <h3>Training corpus (editable — vocab rebuilds live)</h3>
+      <div class="flow" style="margin-bottom:8px;">
+        <button class="btn" id="s23-reset">Reset to the-verdict.txt</button>
+        <input class="small" style="flex:1;min-width:160px" id="s23-search" placeholder="filter vocab: type a word or an id…">
+      </div>
+      <textarea id="s23-corpus" rows="6"></textarea>
+
+      <h3>Vocabulary table (token → id)</h3>
+      <div class="scrollbox"><table><thead><tr><th>id</th><th>token</th></tr></thead><tbody id="s23-vocabtable"></tbody></table></div>
+
+      <h3>Now encode the example sentence against this vocab</h3>
+      <p>Every token gets looked up. Tokens colored <span class="badge red">red</span> aren't in the vocab — this is exactly the <code>KeyError</code> the notebook hits with <code>SimpleTokenizerV1</code>.</p>
+      <div class="chips" id="s23-encoded"></div>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>all_words = sorted(set(preprocessed))
+vocab = {token:integer for integer,token in enumerate(all_words)}
+
+class SimpleTokenizerV1:
+    def __init__(self, vocab):
+        self.str_to_int = vocab
+        self.int_to_str = {i:s for s,i in vocab.items()}
+    def encode(self, text):
+        preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+        preprocessed = [item.strip() for item in preprocessed if item.strip()]
+        ids = [self.str_to_int[s] for s in preprocessed]   # KeyError on unknown words
+        return ids</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.4 -->
+  <section class="panel" id="s24">
+    <div class="card">
+      <h2>2.4 Adding special context tokens</h2>
+      <p class="lead">Fix the <code>KeyError</code> by adding two special entries to the vocab: <code>&lt;|unk|&gt;</code> for any word not seen during training, and <code>&lt;|endoftext|&gt;</code> to mark boundaries between documents. This is <code>SimpleTokenizerV2</code>.</p>
+
+      <div class="row">
+        <div class="stat"><b id="s24-vocabsize">–</b><span>vocab size (+2 special)</span></div>
+      </div>
+
+      <h3>Encode → IDs (unknown words now map to &lt;|unk|&gt; instead of crashing)</h3>
+      <div class="chips" id="s24-encoded"></div>
+
+      <h3>Decode(Encode(text)) — round trip</h3>
+      <p>Compare this to your original input above. Every word that wasn't in the training vocab has been permanently replaced by <code>&lt;|unk|&gt;</code> — information is lost. That's the motivation for byte-pair encoding, next.</p>
+      <div class="scrollbox" style="max-height:90px;"><table><tr><td id="s24-decoded" style="white-space:pre-wrap; font-family:var(--mono);"></td></tr></table></div>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>all_tokens = sorted(list(set(preprocessed)))
+all_tokens.extend(["&lt;|endoftext|&gt;", "&lt;|unk|&gt;"])
+vocab = {token:integer for integer,token in enumerate(all_tokens)}
+
+class SimpleTokenizerV2:
+    def encode(self, text):
+        preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+        preprocessed = [item.strip() for item in preprocessed if item.strip()]
+        preprocessed = [item if item in self.str_to_int else "&lt;|unk|&gt;" for item in preprocessed]
+        return [self.str_to_int[s] for s in preprocessed]</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.5 -->
+  <section class="panel" id="s25">
+    <div class="card">
+      <h2>2.5 Byte pair encoding (the real GPT-2 tokenizer)</h2>
+      <p class="lead">GPT-2 doesn't use a word-level vocab with <code>&lt;|unk|&gt;</code> at all. Its BPE tokenizer (50,257 tokens) breaks <em>any</em> word — even ones it never trained on — into known subword pieces, so nothing is ever lost. This runs the actual GPT-2 encoding (<code>tiktoken</code>'s <code>"gpt2"</code>, aka <code>r50k_base</code>) live in your browser.</p>
+
+      <p><span class="status-dot" id="s25-status-dot"></span><span id="s25-status">loading tokenizer…</span></p>
+
+      <h3>Subword pieces (· marks a leading space, the way GPT-2 marks word starts)</h3>
+      <div class="chips" id="s25-pieces"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <div class="stat"><b id="s25-count">–</b><span>BPE tokens</span></div>
+        <div class="stat"><b id="s25-word-count">–</b><span>regex word-tokens (2.2)</span></div>
+      </div>
+
+      <p>Notice <code>someunknownPlace</code> — absent from any fixed word vocab — still gets encoded exactly, split into pieces like <code>some</code> + <code>unknown</code> + <code>Place</code>, instead of collapsing into one lossy <code>&lt;|unk|&gt;</code>.</p>
+
+      <h3>Round trip: decode(encode(text))</h3>
+      <div class="scrollbox" style="max-height:90px;"><table><tr><td id="s25-decoded" style="white-space:pre-wrap; font-family:var(--mono);"></td></tr></table></div>
+      <p id="s25-match"></p>
+
+      <div class="note" id="s25-fallback-note" style="display:none;">
+        Live tokenizer library didn't load (offline?) — showing the notebook's own precomputed result for the default sentence instead. Everything below still reflects real GPT-2 BPE output.
+      </div>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>import tiktoken
+tokenizer = tiktoken.get_encoding("gpt2")
+integers = tokenizer.encode(text, allowed_special={"&lt;|endoftext|&gt;"})
+strings = tokenizer.decode(integers)</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.6 -->
+  <section class="panel" id="s26">
+    <div class="card">
+      <h2>2.6 Data sampling with a sliding window</h2>
+      <p class="lead">To train a next-token predictor, every training example is just: some tokens in, the <em>same tokens shifted right by one</em> out. <code>GPTDatasetV1</code> slides a window of size <code>max_length</code> across the token stream, moving <code>stride</code> tokens each time.</p>
+
+      <div class="row">
+        <div class="col">
+          <label>max_length (context size): <b id="s26-maxlen-val"></b></label><br>
+          <input type="range" id="s26-maxlen" min="1" max="10" value="4" style="width:100%">
+        </div>
+        <div class="col">
+          <label>stride: <b id="s26-stride-val"></b></label><br>
+          <input type="range" id="s26-stride" min="1" max="10" value="1" style="width:100%">
+        </div>
+      </div>
+
+      <h3>Token stream (from the BPE-encoded sentence above)</h3>
+      <div class="chips" id="s26-stream"></div>
+
+      <h3>Current window</h3>
+      <div class="flow">
+        <button class="btn" id="s26-prev">← prev</button>
+        <span id="s26-idx" style="font-family:var(--mono)"></span>
+        <button class="btn" id="s26-next">next →</button>
+      </div>
+      <table style="margin-top:8px;">
+        <tr><td style="color:var(--blue)">x (input)&nbsp;</td><td id="s26-x" style="font-family:var(--mono)"></td></tr>
+        <tr><td style="color:var(--green)">y (target)</td><td id="s26-y" style="font-family:var(--mono)"></td></tr>
+      </table>
+
+      <h3>All windows this (max_length, stride) produces</h3>
+      <div class="scrollbox"><table><thead><tr><th>i</th><th>input tokens</th><th>→</th><th>target tokens</th></tr></thead><tbody id="s26-table"></tbody></table></div>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>for i in range(0, len(token_ids) - max_length, stride):
+    input_chunk  = token_ids[i : i + max_length]
+    target_chunk = token_ids[i+1 : i + max_length + 1]</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.7 -->
+  <section class="panel" id="s27">
+    <div class="card">
+      <h2>2.7 Creating token embeddings</h2>
+      <p class="lead">An embedding layer is just a lookup table: one row per vocab id. <code>torch.nn.Embedding(vocab_size, output_dim)</code> creates a <code>vocab_size × output_dim</code> matrix of (initially random) numbers; looking up id <code>k</code> returns row <code>k</code>. GPT-2 really uses a 50,257 × 256 matrix — here's a toy 6 × 3 one you can actually see in full.</p>
+
+      <h3>The embedding matrix (6 words × 3 dimensions, seeded random)</h3>
+      <div class="scrollbox" style="max-height:220px;"><table id="s27-matrix"></table></div>
+
+      <h3>Look up some ids</h3>
+      <div class="flow">
+        <label>input_ids:</label>
+        <input class="small" id="s27-ids" value="2, 3, 5, 1">
+        <button class="btn" id="s27-lookup">Look up</button>
+      </div>
+      <div class="scrollbox" style="max-height:200px; margin-top:8px;"><table id="s27-result"></table></div>
+      <p class="note">Each row above is just <em>copied</em> from the matching row of the matrix — no computation, purely a lookup. That's why the same id always gives the same vector, regardless of where it appears.</p>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>torch.manual_seed(123)
+embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
+embedding_layer(torch.tensor([2, 3, 5, 1]))   # -> 4 rows copied from the weight matrix</pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- 2.8 -->
+  <section class="panel" id="s28">
+    <div class="card">
+      <h2>2.8 Encoding word positions</h2>
+      <p class="lead">Token embeddings alone can't tell "the" at position 0 from "the" at position 40 — the lookup is identical either way. GPT-2 fixes this with a <em>second</em> embedding table, indexed by position (0, 1, 2, …), which gets added elementwise to the token embedding.</p>
+
+      <div class="flow">
+        <label>input_ids (4 of them, ids 0-5):</label>
+        <input class="small" id="s28-ids" value="2, 3, 5, 1">
+        <button class="btn" id="s28-compute">Compute</button>
+        <button class="btn" id="s28-sameid">Try same id 4× → [2,2,2,2]</button>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div class="col">
+          <h3 style="margin-top:0">token embeddings</h3>
+          <table id="s28-tok"></table>
+        </div>
+        <div class="arrow">+</div>
+        <div class="col">
+          <h3 style="margin-top:0">position embeddings (row = position 0..3)</h3>
+          <table id="s28-pos"></table>
+        </div>
+        <div class="arrow">=</div>
+        <div class="col">
+          <h3 style="margin-top:0">final input embeddings</h3>
+          <table id="s28-final"></table>
+        </div>
+      </div>
+      <p class="note" id="s28-note"></p>
+
+      <details>
+        <summary>Show notebook code</summary>
+        <pre>pos_embedding_layer = torch.nn.Embedding(context_length, output_dim)
+pos_embeddings = pos_embedding_layer(torch.arange(max_length))
+input_embeddings = token_embeddings + pos_embeddings   # elementwise add, broadcast over batch</pre>
+      </details>
+    </div>
+  </section>
+
+</main>
+
+<footer>Built from <code>ch02.ipynb</code> (Build a Large Language Model From Scratch, Sebastian Raschka). GPT-2 BPE runs live via the <code>gpt-tokenizer</code> library (r50k_base encoding = tiktoken's "gpt2").</footer>
+
+<script>
+const VERDICT_TEXT = atob("SSBIQUQgYWx3YXlzIHRob3VnaHQgSmFjayBHaXNidXJuIHJhdGhlciBhIGNoZWFwIGdlbml1cy0tdGhvdWdoIGEgZ29vZCBmZWxsb3cgZW5vdWdoLS1zbyBpdCB3YXMgbm8gZ3JlYXQgc3VycHJpc2UgdG8gbWUgdG8gaGVhciB0aGF0LCBpbiB0aGUgaGVpZ2h0IG9mIGhpcyBnbG9yeSwgaGUgaGFkIGRyb3BwZWQgaGlzIHBhaW50aW5nLCBtYXJyaWVkIGEgcmljaCB3aWRvdywgYW5kIGVzdGFibGlzaGVkIGhpbXNlbGYgaW4gYSB2aWxsYSBvbiB0aGUgUml2aWVyYS4gKFRob3VnaCBJIHJhdGhlciB0aG91Z2h0IGl0IHdvdWxkIGhhdmUgYmVlbiBSb21lIG9yIEZsb3JlbmNlLikKCiJUaGUgaGVpZ2h0IG9mIGhpcyBnbG9yeSItLXRoYXQgd2FzIHdoYXQgdGhlIHdvbWVuIGNhbGxlZCBpdC4gSSBjYW4gaGVhciBNcnMuIEdpZGVvbiBUaHdpbmctLWhpcyBsYXN0IENoaWNhZ28gc2l0dGVyLS1kZXBsb3JpbmcgaGlzIHVuYWNjb3VudGFibGUgYWJkaWNhdGlvbi4gIk9mIGNvdXJzZSBpdCdzIGdvaW5nIHRvIHNlbmQgdGhlIHZhbHVlIG9mIG15IHBpY3R1cmUgJ3dheSB1cDsgYnV0IEkgZG9uJ3QgdGhpbmsgb2YgdGhhdCwgTXIuIFJpY2toYW0tLXRoZSBsb3NzIHRvIEFycnQgaXMgYWxsIEkgdGhpbmsgb2YuIiBUaGUgd29yZCwgb24gTXJzLiBUaHdpbmcncyBsaXBzLCBtdWx0aXBsaWVkIGl0cyBfcnNfIGFzIHRob3VnaCB0aGV5IHdlcmUgcmVmbGVjdGVkIGluIGFuIGVuZGxlc3MgdmlzdGEgb2YgbWlycm9ycy4gQW5kIGl0IHdhcyBub3Qgb25seSB0aGUgTXJzLiBUaHdpbmdzIHdobyBtb3VybmVkLiBIYWQgbm90IHRoZSBleHF1aXNpdGUgSGVybWlhIENyb2Z0LCBhdCB0aGUgbGFzdCBHcmFmdG9uIEdhbGxlcnkgc2hvdywgc3RvcHBlZCBtZSBiZWZvcmUgR2lzYnVybidzICJNb29uLWRhbmNlcnMiIHRvIHNheSwgd2l0aCB0ZWFycyBpbiBoZXIgZXllczogIldlIHNoYWxsIG5vdCBsb29rIHVwb24gaXRzIGxpa2UgYWdhaW4iPwoKV2VsbCEtLWV2ZW4gdGhyb3VnaCB0aGUgcHJpc20gb2YgSGVybWlhJ3MgdGVhcnMgSSBmZWx0IGFibGUgdG8gZmFjZSB0aGUgZmFjdCB3aXRoIGVxdWFuaW1pdHkuIFBvb3IgSmFjayBHaXNidXJuISBUaGUgd29tZW4gaGFkIG1hZGUgaGltLS1pdCB3YXMgZml0dGluZyB0aGF0IHRoZXkgc2hvdWxkIG1vdXJuIGhpbS4gQW1vbmcgaGlzIG93biBzZXggZmV3ZXIgcmVncmV0cyB3ZXJlIGhlYXJkLCBhbmQgaW4gaGlzIG93biB0cmFkZSBoYXJkbHkgYSBtdXJtdXIuIFByb2Zlc3Npb25hbCBqZWFsb3VzeT8gUGVyaGFwcy4gSWYgaXQgd2VyZSwgdGhlIGhvbm91ciBvZiB0aGUgY3JhZnQgd2FzIHZpbmRpY2F0ZWQgYnkgbGl0dGxlIENsYXVkZSBOdXRsZXksIHdobywgaW4gYWxsIGdvb2QgZmFpdGgsIGJyb3VnaHQgb3V0IGluIHRoZSBCdXJsaW5ndG9uIGEgdmVyeSBoYW5kc29tZSAib2JpdHVhcnkiIG9uIEphY2stLW9uZSBvZiB0aG9zZSBzaG93eSBhcnRpY2xlcyBzdG9ja2VkIHdpdGggcmFuZG9tIHRlY2huaWNhbGl0aWVzIHRoYXQgSSBoYXZlIGhlYXJkIChJIHdvbid0IHNheSBieSB3aG9tKSBjb21wYXJlZCB0byBHaXNidXJuJ3MgcGFpbnRpbmcuIEFuZCBzby0taGlzIHJlc29sdmUgYmVpbmcgYXBwYXJlbnRseSBpcnJldm9jYWJsZS0tdGhlIGRpc2N1c3Npb24gZ3JhZHVhbGx5IGRpZWQgb3V0LCBhbmQsIGFzIE1ycy4gVGh3aW5nIGhhZCBwcmVkaWN0ZWQsIHRoZSBwcmljZSBvZiAiR2lzYnVybnMiIHdlbnQgdXAuCgpJdCB3YXMgbm90IHRpbGwgdGhyZWUgeWVhcnMgbGF0ZXIgdGhhdCwgaW4gdGhlIGNvdXJzZSBvZiBhIGZldyB3ZWVrcycgaWRsaW5nIG9uIHRoZSBSaXZpZXJhLCBpdCBzdWRkZW5seSBvY2N1cnJlZCB0byBtZSB0byB3b25kZXIgd2h5IEdpc2J1cm4gaGFkIGdpdmVuIHVwIGhpcyBwYWludGluZy4gT24gcmVmbGVjdGlvbiwgaXQgcmVhbGx5IHdhcyBhIHRlbXB0aW5nIHByb2JsZW0uIFRvIGFjY3VzZSBoaXMgd2lmZSB3b3VsZCBoYXZlIGJlZW4gdG9vIGVhc3ktLWhpcyBmYWlyIHNpdHRlcnMgaGFkIGJlZW4gZGVuaWVkIHRoZSBzb2xhY2Ugb2Ygc2F5aW5nIHRoYXQgTXJzLiBHaXNidXJuIGhhZCAiZHJhZ2dlZCBoaW0gZG93bi4iIEZvciBNcnMuIEdpc2J1cm4tLWFzIHN1Y2gtLWhhZCBub3QgZXhpc3RlZCB0aWxsIG5lYXJseSBhIHllYXIgYWZ0ZXIgSmFjaydzIHJlc29sdmUgaGFkIGJlZW4gdGFrZW4uIEl0IG1pZ2h0IGJlIHRoYXQgaGUgaGFkIG1hcnJpZWQgaGVyLS1zaW5jZSBoZSBsaWtlZCBoaXMgZWFzZS0tYmVjYXVzZSBoZSBkaWRuJ3Qgd2FudCB0byBnbyBvbiBwYWludGluZzsgYnV0IGl0IHdvdWxkIGhhdmUgYmVlbiBoYXJkIHRvIHByb3ZlIHRoYXQgaGUgaGFkIGdpdmVuIHVwIGhpcyBwYWludGluZyBiZWNhdXNlIGhlIGhhZCBtYXJyaWVkIGhlci4KCk9mIGNvdXJzZSwgaWYgc2hlIGhhZCBub3QgZHJhZ2dlZCBoaW0gZG93biwgc2hlIGhhZCBlcXVhbGx5LCBhcyBNaXNzIENyb2Z0IGNvbnRlbmRlZCwgZmFpbGVkIHRvICJsaWZ0IGhpbSB1cCItLXNoZSBoYWQgbm90IGxlZCBoaW0gYmFjayB0byB0aGUgZWFzZWwuIFRvIHB1dCB0aGUgYnJ1c2ggaW50byBoaXMgaGFuZCBhZ2Fpbi0td2hhdCBhIHZvY2F0aW9uIGZvciBhIHdpZmUhIEJ1dCBNcnMuIEdpc2J1cm4gYXBwZWFyZWQgdG8gaGF2ZSBkaXNkYWluZWQgaXQtLWFuZCBJIGZlbHQgaXQgbWlnaHQgYmUgaW50ZXJlc3RpbmcgdG8gZmluZCBvdXQgd2h5LgoKVGhlIGRlc3VsdG9yeSBsaWZlIG9mIHRoZSBSaXZpZXJhIGxlbmRzIGl0c2VsZiB0byBzdWNoIHB1cmVseSBhY2FkZW1pYyBzcGVjdWxhdGlvbnM7IGFuZCBoYXZpbmcsIG9uIG15IHdheSB0byBNb250ZSBDYXJsbywgY2F1Z2h0IGEgZ2xpbXBzZSBvZiBKYWNrJ3MgYmFsdXN0cmFkZWQgdGVycmFjZXMgYmV0d2VlbiB0aGUgcGluZXMsIEkgaGFkIG15c2VsZiBib3JuZSB0aGl0aGVyIHRoZSBuZXh0IGRheS4KCkkgZm91bmQgdGhlIGNvdXBsZSBhdCB0ZWEgYmVuZWF0aCB0aGVpciBwYWxtLXRyZWVzOyBhbmQgTXJzLiBHaXNidXJuJ3Mgd2VsY29tZSB3YXMgc28gZ2VuaWFsIHRoYXQsIGluIHRoZSBlbnN1aW5nIHdlZWtzLCBJIGNsYWltZWQgaXQgZnJlcXVlbnRseS4gSXQgd2FzIG5vdCB0aGF0IG15IGhvc3Rlc3Mgd2FzICJpbnRlcmVzdGluZyI6IG9uIHRoYXQgcG9pbnQgSSBjb3VsZCBoYXZlIGdpdmVuIE1pc3MgQ3JvZnQgdGhlIGZ1bGxlc3QgcmVhc3N1cmFuY2UuIEl0IHdhcyBqdXN0IGJlY2F1c2Ugc2hlIHdhcyBfbm90XyBpbnRlcmVzdGluZy0taWYgSSBtYXkgYmUgcGFyZG9uZWQgdGhlIGJ1bGwtLXRoYXQgSSBmb3VuZCBoZXIgc28uIEZvciBKYWNrLCBhbGwgaGlzIGxpZmUsIGhhZCBiZWVuIHN1cnJvdW5kZWQgYnkgaW50ZXJlc3Rpbmcgd29tZW46IHRoZXkgaGFkIGZvc3RlcmVkIGhpcyBhcnQsIGl0IGhhZCBiZWVuIHJlYXJlZCBpbiB0aGUgaG90LWhvdXNlIG9mIHRoZWlyIGFkdWxhdGlvbi4gQW5kIGl0IHdhcyB0aGVyZWZvcmUgaW5zdHJ1Y3RpdmUgdG8gbm90ZSB3aGF0IGVmZmVjdCB0aGUgImRlYWRlbmluZyBhdG1vc3BoZXJlIG9mIG1lZGlvY3JpdHkiIChJIHF1b3RlIE1pc3MgQ3JvZnQpIHdhcyBoYXZpbmcgb24gaGltLgoKSSBoYXZlIG1lbnRpb25lZCB0aGF0IE1ycy4gR2lzYnVybiB3YXMgcmljaDsgYW5kIGl0IHdhcyBpbW1lZGlhdGVseSBwZXJjZXB0aWJsZSB0aGF0IGhlciBodXNiYW5kIHdhcyBleHRyYWN0aW5nIGZyb20gdGhpcyBjaXJjdW1zdGFuY2UgYSBkZWxpY2F0ZSBidXQgc3Vic3RhbnRpYWwgc2F0aXNmYWN0aW9uLiBJdCBpcywgYXMgYSBydWxlLCB0aGUgcGVvcGxlIHdobyBzY29ybiBtb25leSB3aG8gZ2V0IG1vc3Qgb3V0IG9mIGl0OyBhbmQgSmFjaydzIGVsZWdhbnQgZGlzZGFpbiBvZiBoaXMgd2lmZSdzIGJpZyBiYWxhbmNlIGVuYWJsZWQgaGltLCB3aXRoIGFuIGFwcGVhcmFuY2Ugb2YgcGVyZmVjdCBnb29kLWJyZWVkaW5nLCB0byB0cmFuc211dGUgaXQgaW50byBvYmplY3RzIG9mIGFydCBhbmQgbHV4dXJ5LiBUbyB0aGUgbGF0dGVyLCBJIG11c3QgYWRkLCBoZSByZW1haW5lZCByZWxhdGl2ZWx5IGluZGlmZmVyZW50OyBidXQgaGUgd2FzIGJ1eWluZyBSZW5haXNzYW5jZSBicm9uemVzIGFuZCBlaWdodGVlbnRoLWNlbnR1cnkgcGljdHVyZXMgd2l0aCBhIGRpc2NyaW1pbmF0aW9uIHRoYXQgYmVzcG9rZSB0aGUgYW1wbGVzdCByZXNvdXJjZXMuCgoiTW9uZXkncyBvbmx5IGV4Y3VzZSBpcyB0byBwdXQgYmVhdXR5IGludG8gY2lyY3VsYXRpb24sIiB3YXMgb25lIG9mIHRoZSBheGlvbXMgaGUgbGFpZCBkb3duIGFjcm9zcyB0aGUgU2V2cmVzIGFuZCBzaWx2ZXIgb2YgYW4gZXhxdWlzaXRlbHkgYXBwb2ludGVkIGx1bmNoZW9uLXRhYmxlLCB3aGVuLCBvbiBhIGxhdGVyIGRheSwgSSBoYWQgYWdhaW4gcnVuIG92ZXIgZnJvbSBNb250ZSBDYXJsbzsgYW5kIE1ycy4gR2lzYnVybiwgYmVhbWluZyBvbiBoaW0sIGFkZGVkIGZvciBteSBlbmxpZ2h0ZW5tZW50OiAiSmFjayBpcyBzbyBtb3JiaWRseSBzZW5zaXRpdmUgdG8gZXZlcnkgZm9ybSBvZiBiZWF1dHkuIgoKUG9vciBKYWNrISBJdCBoYWQgYWx3YXlzIGJlZW4gaGlzIGZhdGUgdG8gaGF2ZSB3b21lbiBzYXkgc3VjaCB0aGluZ3Mgb2YgaGltOiB0aGUgZmFjdCBzaG91bGQgYmUgc2V0IGRvd24gaW4gZXh0ZW51YXRpb24uIFdoYXQgc3RydWNrIG1lIG5vdyB3YXMgdGhhdCwgZm9yIHRoZSBmaXJzdCB0aW1lLCBoZSByZXNlbnRlZCB0aGUgdG9uZS4gSSBoYWQgc2VlbiBoaW0sIHNvIG9mdGVuLCBiYXNraW5nIHVuZGVyIHNpbWlsYXIgdHJpYnV0ZXMtLXdhcyBpdCB0aGUgY29uanVnYWwgbm90ZSB0aGF0IHJvYmJlZCB0aGVtIG9mIHRoZWlyIHNhdm91cj8gTm8tLWZvciwgb2RkbHkgZW5vdWdoLCBpdCBiZWNhbWUgYXBwYXJlbnQgdGhhdCBoZSB3YXMgZm9uZCBvZiBNcnMuIEdpc2J1cm4tLWZvbmQgZW5vdWdoIG5vdCB0byBzZWUgaGVyIGFic3VyZGl0eS4gSXQgd2FzIGhpcyBvd24gYWJzdXJkaXR5IGhlIHNlZW1lZCB0byBiZSB3aW5jaW5nIHVuZGVyLS1oaXMgb3duIGF0dGl0dWRlIGFzIGFuIG9iamVjdCBmb3IgZ2FybGFuZHMgYW5kIGluY2Vuc2UuCgoiTXkgZGVhciwgc2luY2UgSSd2ZSBjaHVja2VkIHBhaW50aW5nIHBlb3BsZSBkb24ndCBzYXkgdGhhdCBzdHVmZiBhYm91dCBtZS0tdGhleSBzYXkgaXQgYWJvdXQgVmljdG9yIEdyaW5kbGUsIiB3YXMgaGlzIG9ubHkgcHJvdGVzdCwgYXMgaGUgcm9zZSBmcm9tIHRoZSB0YWJsZSBhbmQgc3Ryb2xsZWQgb3V0IG9udG8gdGhlIHN1bmxpdCB0ZXJyYWNlLgoKSSBnbGFuY2VkIGFmdGVyIGhpbSwgc3RydWNrIGJ5IGhpcyBsYXN0IHdvcmQuIFZpY3RvciBHcmluZGxlIHdhcywgaW4gZmFjdCwgYmVjb21pbmcgdGhlIG1hbiBvZiB0aGUgbW9tZW50LS1hcyBKYWNrIGhpbXNlbGYsIG9uZSBtaWdodCBwdXQgaXQsIGhhZCBiZWVuIHRoZSBtYW4gb2YgdGhlIGhvdXIuIFRoZSB5b3VuZ2VyIGFydGlzdCB3YXMgc2FpZCB0byBoYXZlIGZvcm1lZCBoaW1zZWxmIGF0IG15IGZyaWVuZCdzIGZlZXQsIGFuZCBJIHdvbmRlcmVkIGlmIGEgdGluZ2Ugb2YgamVhbG91c3kgdW5kZXJsYXkgdGhlIGxhdHRlcidzIG15c3RlcmlvdXMgYWJkaWNhdGlvbi4gQnV0IG5vLS1mb3IgaXQgd2FzIG5vdCB0aWxsIGFmdGVyIHRoYXQgZXZlbnQgdGhhdCB0aGUgX3Jvc2UgRHViYXJyeV8gZHJhd2luZy1yb29tcyBoYWQgYmVndW4gdG8gZGlzcGxheSB0aGVpciAiR3JpbmRsZXMuIgoKSSB0dXJuZWQgdG8gTXJzLiBHaXNidXJuLCB3aG8gaGFkIGxpbmdlcmVkIHRvIGdpdmUgYSBsdW1wIG9mIHN1Z2FyIHRvIGhlciBzcGFuaWVsIGluIHRoZSBkaW5pbmctcm9vbS4KCiJXaHkgX2hhc18gaGUgY2h1Y2tlZCBwYWludGluZz8iIEkgYXNrZWQgYWJydXB0bHkuCgpTaGUgcmFpc2VkIGhlciBleWVicm93cyB3aXRoIGEgaGludCBvZiBnb29kLWh1bW91cmVkIHN1cnByaXNlLgoKIk9oLCBoZSBkb2Vzbid0IF9oYXZlXyB0byBub3csIHlvdSBrbm93OyBhbmQgSSB3YW50IGhpbSB0byBlbmpveSBoaW1zZWxmLCIgc2hlIHNhaWQgcXVpdGUgc2ltcGx5LgoKSSBsb29rZWQgYWJvdXQgdGhlIHNwYWNpb3VzIHdoaXRlLXBhbmVsbGVkIHJvb20sIHdpdGggaXRzIF9mYW1pbGxlLXZlcnRlXyB2YXNlcyByZXBlYXRpbmcgdGhlIHRvbmVzIG9mIHRoZSBwYWxlIGRhbWFzayBjdXJ0YWlucywgYW5kIGl0cyBlaWdodGVlbnRoLWNlbnR1cnkgcGFzdGVscyBpbiBkZWxpY2F0ZSBmYWRlZCBmcmFtZXMuCgoiSGFzIGhlIGNodWNrZWQgaGlzIHBpY3R1cmVzIHRvbz8gSSBoYXZlbid0IHNlZW4gYSBzaW5nbGUgb25lIGluIHRoZSBob3VzZS4iCgpBIHNsaWdodCBzaGFkZSBvZiBjb25zdHJhaW50IGNyb3NzZWQgTXJzLiBHaXNidXJuJ3Mgb3BlbiBjb3VudGVuYW5jZS4gIkl0J3MgaGlzIHJpZGljdWxvdXMgbW9kZXN0eSwgeW91IGtub3cuIEhlIHNheXMgdGhleSdyZSBub3QgZml0IHRvIGhhdmUgYWJvdXQ7IGhlJ3Mgc2VudCB0aGVtIGFsbCBhd2F5IGV4Y2VwdCBvbmUtLW15IHBvcnRyYWl0LS1hbmQgdGhhdCBJIGhhdmUgdG8ga2VlcCB1cHN0YWlycy4iCgpIaXMgcmlkaWN1bG91cyBtb2Rlc3R5LS1KYWNrJ3MgbW9kZXN0eSBhYm91dCBoaXMgcGljdHVyZXM/IE15IGN1cmlvc2l0eSB3YXMgZ3Jvd2luZyBsaWtlIHRoZSBiZWFuLXN0YWxrLiBJIHNhaWQgcGVyc3Vhc2l2ZWx5IHRvIG15IGhvc3Rlc3M6ICJJIG11c3QgcmVhbGx5IHNlZSB5b3VyIHBvcnRyYWl0LCB5b3Uga25vdy4iCgpTaGUgZ2xhbmNlZCBvdXQgYWxtb3N0IHRpbW9yb3VzbHkgYXQgdGhlIHRlcnJhY2Ugd2hlcmUgaGVyIGh1c2JhbmQsIGxvdW5naW5nIGluIGEgaG9vZGVkIGNoYWlyLCBoYWQgbGl0IGEgY2lnYXIgYW5kIGRyYXduIHRoZSBSdXNzaWFuIGRlZXJob3VuZCdzIGhlYWQgYmV0d2VlbiBoaXMga25lZXMuCgoiV2VsbCwgY29tZSB3aGlsZSBoZSdzIG5vdCBsb29raW5nLCIgc2hlIHNhaWQsIHdpdGggYSBsYXVnaCB0aGF0IHRyaWVkIHRvIGhpZGUgaGVyIG5lcnZvdXNuZXNzOyBhbmQgSSBmb2xsb3dlZCBoZXIgYmV0d2VlbiB0aGUgbWFyYmxlIEVtcGVyb3JzIG9mIHRoZSBoYWxsLCBhbmQgdXAgdGhlIHdpZGUgc3RhaXJzIHdpdGggdGVycmEtY290dGEgbnltcGhzIHBvaXNlZCBhbW9uZyBmbG93ZXJzIGF0IGVhY2ggbGFuZGluZy4KCkluIHRoZSBkaW1tZXN0IGNvcm5lciBvZiBoZXIgYm91ZG9pciwgYW1pZCBhIHByb2Z1c2lvbiBvZiBkZWxpY2F0ZSBhbmQgZGlzdGluZ3Vpc2hlZCBvYmplY3RzLCBodW5nIG9uZSBvZiB0aGUgZmFtaWxpYXIgb3ZhbCBjYW52YXNlcywgaW4gdGhlIGluZXZpdGFibGUgZ2FybGFuZGVkIGZyYW1lLiBUaGUgbWVyZSBvdXRsaW5lIG9mIHRoZSBmcmFtZSBjYWxsZWQgdXAgYWxsIEdpc2J1cm4ncyBwYXN0IQoKTXJzLiBHaXNidXJuIGRyZXcgYmFjayB0aGUgd2luZG93LWN1cnRhaW5zLCBtb3ZlZCBhc2lkZSBhIF9qYXJkaW5pZXJlXyBmdWxsIG9mIHBpbmsgYXphbGVhcywgcHVzaGVkIGFuIGFybS1jaGFpciBhd2F5LCBhbmQgc2FpZDogIklmIHlvdSBzdGFuZCBoZXJlIHlvdSBjYW4ganVzdCBtYW5hZ2UgdG8gc2VlIGl0LiBJIGhhZCBpdCBvdmVyIHRoZSBtYW50ZWwtcGllY2UsIGJ1dCBoZSB3b3VsZG4ndCBsZXQgaXQgc3RheS4iCgpZZXMtLUkgY291bGQganVzdCBtYW5hZ2UgdG8gc2VlIGl0LS10aGUgZmlyc3QgcG9ydHJhaXQgb2YgSmFjaydzIEkgaGFkIGV2ZXIgaGFkIHRvIHN0cmFpbiBteSBleWVzIG92ZXIhIFVzdWFsbHkgdGhleSBoYWQgdGhlIHBsYWNlIG9mIGhvbm91ci0tc2F5IHRoZSBjZW50cmFsIHBhbmVsIGluIGEgcGFsZSB5ZWxsb3cgb3IgX3Jvc2UgRHViYXJyeV8gZHJhd2luZy1yb29tLCBvciBhIG1vbnVtZW50YWwgZWFzZWwgcGxhY2VkIHNvIHRoYXQgaXQgdG9vayB0aGUgbGlnaHQgdGhyb3VnaCBjdXJ0YWlucyBvZiBvbGQgVmVuZXRpYW4gcG9pbnQuIFRoZSBtb3JlIG1vZGVzdCBwbGFjZSBiZWNhbWUgdGhlIHBpY3R1cmUgYmV0dGVyOyB5ZXQsIGFzIG15IGV5ZXMgZ3JldyBhY2N1c3RvbWVkIHRvIHRoZSBoYWxmLWxpZ2h0LCBhbGwgdGhlIGNoYXJhY3RlcmlzdGljIHF1YWxpdGllcyBjYW1lIG91dC0tYWxsIHRoZSBoZXNpdGF0aW9ucyBkaXNndWlzZWQgYXMgYXVkYWNpdGllcywgdGhlIHRyaWNrcyBvZiBwcmVzdGlkaWdpdGF0aW9uIGJ5IHdoaWNoLCB3aXRoIHN1Y2ggY29uc3VtbWF0ZSBza2lsbCwgaGUgbWFuYWdlZCB0byBkaXZlcnQgYXR0ZW50aW9uIGZyb20gdGhlIHJlYWwgYnVzaW5lc3Mgb2YgdGhlIHBpY3R1cmUgdG8gc29tZSBwcmV0dHkgaXJyZWxldmFuY2Ugb2YgZGV0YWlsLiBNcnMuIEdpc2J1cm4sIHByZXNlbnRpbmcgYSBuZXV0cmFsIHN1cmZhY2UgdG8gd29yayBvbi0tZm9ybWluZywgYXMgaXQgd2VyZSwgc28gaW5ldml0YWJseSB0aGUgYmFja2dyb3VuZCBvZiBoZXIgb3duIHBpY3R1cmUtLWhhZCBsZW50IGhlcnNlbGYgaW4gYW4gdW51c3VhbCBkZWdyZWUgdG8gdGhlIGRpc3BsYXkgb2YgdGhpcyBmYWxzZSB2aXJ0dW9zaXR5LiBUaGUgcGljdHVyZSB3YXMgb25lIG9mIEphY2sncyAic3Ryb25nZXN0LCIgYXMgaGlzIGFkbWlyZXJzIHdvdWxkIGhhdmUgcHV0IGl0LS1pdCByZXByZXNlbnRlZCwgb24gaGlzIHBhcnQsIGEgc3dlbGxpbmcgb2YgbXVzY2xlcywgYSBjb25nZXN0aW5nIG9mIHZlaW5zLCBhIGJhbGFuY2luZywgc3RyYWRkbGluZyBhbmQgc3RyYWluaW5nLCB0aGF0IHJlbWluZGVkIG9uZSBvZiB0aGUgY2lyY3VzLWNsb3duJ3MgaXJvbmljIGVmZm9ydHMgdG8gbGlmdCBhIGZlYXRoZXIuIEl0IG1ldCwgaW4gc2hvcnQsIGF0IGV2ZXJ5IHBvaW50IHRoZSBkZW1hbmQgb2YgbG92ZWx5IHdvbWFuIHRvIGJlIHBhaW50ZWQgInN0cm9uZ2x5IiBiZWNhdXNlIHNoZSB3YXMgdGlyZWQgb2YgYmVpbmcgcGFpbnRlZCAic3dlZXRseSItLWFuZCB5ZXQgbm90IHRvIGxvc2UgYW4gYXRvbSBvZiB0aGUgc3dlZXRuZXNzLgoKIkl0J3MgdGhlIGxhc3QgaGUgcGFpbnRlZCwgeW91IGtub3csIiBNcnMuIEdpc2J1cm4gc2FpZCB3aXRoIHBhcmRvbmFibGUgcHJpZGUuICJUaGUgbGFzdCBidXQgb25lLCIgc2hlIGNvcnJlY3RlZCBoZXJzZWxmLS0iYnV0IHRoZSBvdGhlciBkb2Vzbid0IGNvdW50LCBiZWNhdXNlIGhlIGRlc3Ryb3llZCBpdC4iCgoiRGVzdHJveWVkIGl0PyIgSSB3YXMgYWJvdXQgdG8gZm9sbG93IHVwIHRoaXMgY2x1ZSB3aGVuIEkgaGVhcmQgYSBmb290c3RlcCBhbmQgc2F3IEphY2sgaGltc2VsZiBvbiB0aGUgdGhyZXNob2xkLgoKQXMgaGUgc3Rvb2QgdGhlcmUsIGhpcyBoYW5kcyBpbiB0aGUgcG9ja2V0cyBvZiBoaXMgdmVsdmV0ZWVuIGNvYXQsIHRoZSB0aGluIGJyb3duIHdhdmVzIG9mIGhhaXIgcHVzaGVkIGJhY2sgZnJvbSBoaXMgd2hpdGUgZm9yZWhlYWQsIGhpcyBsZWFuIHN1bmJ1cm50IGNoZWVrcyBmdXJyb3dlZCBieSBhIHNtaWxlIHRoYXQgbGlmdGVkIHRoZSB0aXBzIG9mIGEgc2VsZi1jb25maWRlbnQgbW91c3RhY2hlLCBJIGZlbHQgdG8gd2hhdCBhIGRlZ3JlZSBoZSBoYWQgdGhlIHNhbWUgcXVhbGl0eSBhcyBoaXMgcGljdHVyZXMtLXRoZSBxdWFsaXR5IG9mIGxvb2tpbmcgY2xldmVyZXIgdGhhbiBoZSB3YXMuCgpIaXMgd2lmZSBnbGFuY2VkIGF0IGhpbSBkZXByZWNhdGluZ2x5LCBidXQgaGlzIGV5ZXMgdHJhdmVsbGVkIHBhc3QgaGVyIHRvIHRoZSBwb3J0cmFpdC4KCiJNci4gUmlja2hhbSB3YW50ZWQgdG8gc2VlIGl0LCIgc2hlIGJlZ2FuLCBhcyBpZiBleGN1c2luZyBoZXJzZWxmLiBIZSBzaHJ1Z2dlZCBoaXMgc2hvdWxkZXJzLCBzdGlsbCBzbWlsaW5nLgoKIk9oLCBSaWNraGFtIGZvdW5kIG1lIG91dCBsb25nIGFnbywiIGhlIHNhaWQgbGlnaHRseTsgdGhlbiwgcGFzc2luZyBoaXMgYXJtIHRocm91Z2ggbWluZTogIkNvbWUgYW5kIHNlZSB0aGUgcmVzdCBvZiB0aGUgaG91c2UuIgoKSGUgc2hvd2VkIGl0IHRvIG1lIHdpdGggYSBraW5kIG9mIG5haXZlIHN1YnVyYmFuIHByaWRlOiB0aGUgYmF0aC1yb29tcywgdGhlIHNwZWFraW5nLXR1YmVzLCB0aGUgZHJlc3MtY2xvc2V0cywgdGhlIHRyb3VzZXItcHJlc3Nlcy0tYWxsIHRoZSBjb21wbGV4IHNpbXBsaWZpY2F0aW9ucyBvZiB0aGUgbWlsbGlvbmFpcmUncyBkb21lc3RpYyBlY29ub215LiBBbmQgd2hlbmV2ZXIgbXkgd29uZGVyIHBhaWQgdGhlIGV4cGVjdGVkIHRyaWJ1dGUgaGUgc2FpZCwgdGhyb3dpbmcgb3V0IGhpcyBjaGVzdCBhIGxpdHRsZTogIlllcywgSSByZWFsbHkgZG9uJ3Qgc2VlIGhvdyBwZW9wbGUgbWFuYWdlIHRvIGxpdmUgd2l0aG91dCB0aGF0LiIKCldlbGwtLWl0IHdhcyBqdXN0IHRoZSBlbmQgb25lIG1pZ2h0IGhhdmUgZm9yZXNlZW4gZm9yIGhpbS4gT25seSBoZSB3YXMsIHRocm91Z2ggaXQgYWxsIGFuZCBpbiBzcGl0ZSBvZiBpdCBhbGwtLWFzIGhlIGhhZCBiZWVuIHRocm91Z2gsIGFuZCBpbiBzcGl0ZSBvZiwgaGlzIHBpY3R1cmVzLS1zbyBoYW5kc29tZSwgc28gY2hhcm1pbmcsIHNvIGRpc2FybWluZywgdGhhdCBvbmUgbG9uZ2VkIHRvIGNyeSBvdXQ6ICJCZSBkaXNzYXRpc2ZpZWQgd2l0aCB5b3VyIGxlaXN1cmUhIiBhcyBvbmNlIG9uZSBoYWQgbG9uZ2VkIHRvIHNheTogIkJlIGRpc3NhdGlzZmllZCB3aXRoIHlvdXIgd29yayEiCgpCdXQsIHdpdGggdGhlIGNyeSBvbiBteSBsaXBzLCBteSBkaWFnbm9zaXMgc3VmZmVyZWQgYW4gdW5leHBlY3RlZCBjaGVjay4KCiJUaGlzIGlzIG15IG93biBsYWlyLCIgaGUgc2FpZCwgbGVhZGluZyBtZSBpbnRvIGEgZGFyayBwbGFpbiByb29tIGF0IHRoZSBlbmQgb2YgdGhlIGZsb3JpZCB2aXN0YS4gSXQgd2FzIHNxdWFyZSBhbmQgYnJvd24gYW5kIGxlYXRoZXJ5OiBubyAiZWZmZWN0cyI7IG5vIGJyaWMtYS1icmFjLCBub25lIG9mIHRoZSBhaXIgb2YgcG9zaW5nIGZvciByZXByb2R1Y3Rpb24gaW4gYSBwaWN0dXJlIHdlZWtseS0tYWJvdmUgYWxsLCBubyBsZWFzdCBzaWduIG9mIGV2ZXIgaGF2aW5nIGJlZW4gdXNlZCBhcyBhIHN0dWRpby4KClRoZSBmYWN0IGJyb3VnaHQgaG9tZSB0byBtZSB0aGUgYWJzb2x1dGUgZmluYWxpdHkgb2YgSmFjaydzIGJyZWFrIHdpdGggaGlzIG9sZCBsaWZlLgoKIkRvbid0IHlvdSBldmVyIGRhYmJsZSB3aXRoIHBhaW50IGFueSBtb3JlPyIgSSBhc2tlZCwgc3RpbGwgbG9va2luZyBhYm91dCBmb3IgYSB0cmFjZSBvZiBzdWNoIGFjdGl2aXR5LgoKIk5ldmVyLCIgaGUgc2FpZCBicmllZmx5LgoKIk9yIHdhdGVyLWNvbG91ci0tb3IgZXRjaGluZz8iCgpIaXMgY29uZmlkZW50IGV5ZXMgZ3JldyBkaW0sIGFuZCBoaXMgY2hlZWtzIHBhbGVkIGEgbGl0dGxlIHVuZGVyIHRoZWlyIGhhbmRzb21lIHN1bmJ1cm4uCgoiTmV2ZXIgdGhpbmsgb2YgaXQsIG15IGRlYXIgZmVsbG93LS1hbnkgbW9yZSB0aGFuIGlmIEknZCBuZXZlciB0b3VjaGVkIGEgYnJ1c2guIgoKQW5kIGhpcyB0b25lIHRvbGQgbWUgaW4gYSBmbGFzaCB0aGF0IGhlIG5ldmVyIHRob3VnaHQgb2YgYW55dGhpbmcgZWxzZS4KCkkgbW92ZWQgYXdheSwgaW5zdGluY3RpdmVseSBlbWJhcnJhc3NlZCBieSBteSB1bmV4cGVjdGVkIGRpc2NvdmVyeTsgYW5kIGFzIEkgdHVybmVkLCBteSBleWUgZmVsbCBvbiBhIHNtYWxsIHBpY3R1cmUgYWJvdmUgdGhlIG1hbnRlbC1waWVjZS0tdGhlIG9ubHkgb2JqZWN0IGJyZWFraW5nIHRoZSBwbGFpbiBvYWsgcGFuZWxsaW5nIG9mIHRoZSByb29tLgoKIk9oLCBieSBKb3ZlISIgSSBzYWlkLgoKSXQgd2FzIGEgc2tldGNoIG9mIGEgZG9ua2V5LS1hbiBvbGQgdGlyZWQgZG9ua2V5LCBzdGFuZGluZyBpbiB0aGUgcmFpbiB1bmRlciBhIHdhbGwuCgoiQnkgSm92ZS0tYSBTdHJvdWQhIiBJIGNyaWVkLgoKSGUgd2FzIHNpbGVudDsgYnV0IEkgZmVsdCBoaW0gY2xvc2UgYmVoaW5kIG1lLCBicmVhdGhpbmcgYSBsaXR0bGUgcXVpY2tseS4KCiJXaGF0IGEgd29uZGVyISBNYWRlIHdpdGggYSBkb3plbiBsaW5lcy0tYnV0IG9uIGV2ZXJsYXN0aW5nIGZvdW5kYXRpb25zLiBZb3UgbHVja3kgY2hhcCwgd2hlcmUgZGlkIHlvdSBnZXQgaXQ/IgoKSGUgYW5zd2VyZWQgc2xvd2x5OiAiTXJzLiBTdHJvdWQgZ2F2ZSBpdCB0byBtZS4iCgoiQWgtLUkgZGlkbid0IGtub3cgeW91IGV2ZW4ga25ldyB0aGUgU3Ryb3Vkcy4gSGUgd2FzIHN1Y2ggYW4gaW5mbGV4aWJsZSBoZXJtaXQuIgoKIkkgZGlkbid0LS10aWxsIGFmdGVyLiAuIC4gLiBTaGUgc2VudCBmb3IgbWUgdG8gcGFpbnQgaGltIHdoZW4gaGUgd2FzIGRlYWQuIgoKIldoZW4gaGUgd2FzIGRlYWQ/IFlvdT8iCgpJIG11c3QgaGF2ZSBsZXQgYSBsaXR0bGUgdG9vIG11Y2ggYW1hemVtZW50IGVzY2FwZSB0aHJvdWdoIG15IHN1cnByaXNlLCBmb3IgaGUgYW5zd2VyZWQgd2l0aCBhIGRlcHJlY2F0aW5nIGxhdWdoOiAiWWVzLS1zaGUncyBhbiBhd2Z1bCBzaW1wbGV0b24sIHlvdSBrbm93LCBNcnMuIFN0cm91ZC4gSGVyIG9ubHkgaWRlYSB3YXMgdG8gaGF2ZSBoaW0gZG9uZSBieSBhIGZhc2hpb25hYmxlIHBhaW50ZXItLWFoLCBwb29yIFN0cm91ZCEgU2hlIHRob3VnaHQgaXQgdGhlIHN1cmVzdCB3YXkgb2YgcHJvY2xhaW1pbmcgaGlzIGdyZWF0bmVzcy0tb2YgZm9yY2luZyBpdCBvbiBhIHB1cmJsaW5kIHB1YmxpYy4gQW5kIGF0IHRoZSBtb21lbnQgSSB3YXMgX3RoZV8gZmFzaGlvbmFibGUgcGFpbnRlci4iCgoiQWgsIHBvb3IgU3Ryb3VkLS1hcyB5b3Ugc2F5LiBXYXMgX3RoYXRfIGhpcyBoaXN0b3J5PyIKCiJUaGF0IHdhcyBoaXMgaGlzdG9yeS4gU2hlIGJlbGlldmVkIGluIGhpbSwgZ2xvcmllZCBpbiBoaW0tLW9yIHRob3VnaHQgc2hlIGRpZC4gQnV0IHNoZSBjb3VsZG4ndCBiZWFyIG5vdCB0byBoYXZlIGFsbCB0aGUgZHJhd2luZy1yb29tcyB3aXRoIGhlci4gU2hlIGNvdWxkbid0IGJlYXIgdGhlIGZhY3QgdGhhdCwgb24gdmFybmlzaGluZyBkYXlzLCBvbmUgY291bGQgYWx3YXlzIGdldCBuZWFyIGVub3VnaCB0byBzZWUgaGlzIHBpY3R1cmVzLiBQb29yIHdvbWFuISBTaGUncyBqdXN0IGEgZnJhZ21lbnQgZ3JvcGluZyBmb3Igb3RoZXIgZnJhZ21lbnRzLiBTdHJvdWQgaXMgdGhlIG9ubHkgd2hvbGUgSSBldmVyIGtuZXcuIgoKIllvdSBldmVyIGtuZXc/IEJ1dCB5b3UganVzdCBzYWlkLS0iCgpHaXNidXJuIGhhZCBhIGN1cmlvdXMgc21pbGUgaW4gaGlzIGV5ZXMuCgoiT2gsIEkga25ldyBoaW0sIGFuZCBoZSBrbmV3IG1lLS1vbmx5IGl0IGhhcHBlbmVkIGFmdGVyIGhlIHdhcyBkZWFkLiIKCkkgZHJvcHBlZCBteSB2b2ljZSBpbnN0aW5jdGl2ZWx5LiAiV2hlbiBzaGUgc2VudCBmb3IgeW91PyIKCiJZZXMtLXF1aXRlIGluc2Vuc2libGUgdG8gdGhlIGlyb255LiBTaGUgd2FudGVkIGhpbSB2aW5kaWNhdGVkLS1hbmQgYnkgbWUhIgoKSGUgbGF1Z2hlZCBhZ2FpbiwgYW5kIHRocmV3IGJhY2sgaGlzIGhlYWQgdG8gbG9vayB1cCBhdCB0aGUgc2tldGNoIG9mIHRoZSBkb25rZXkuICJUaGVyZSB3ZXJlIGRheXMgd2hlbiBJIGNvdWxkbid0IGxvb2sgYXQgdGhhdCB0aGluZy0tY291bGRuJ3QgZmFjZSBpdC4gQnV0IEkgZm9yY2VkIG15c2VsZiB0byBwdXQgaXQgaGVyZTsgYW5kIG5vdyBpdCdzIGN1cmVkIG1lLS1jdXJlZCBtZS4gVGhhdCdzIHRoZSByZWFzb24gd2h5IEkgZG9uJ3QgZGFiYmxlIGFueSBtb3JlLCBteSBkZWFyIFJpY2toYW07IG9yIHJhdGhlciBTdHJvdWQgaGltc2VsZiBpcyB0aGUgcmVhc29uLiIKCkZvciB0aGUgZmlyc3QgdGltZSBteSBpZGxlIGN1cmlvc2l0eSBhYm91dCBteSBjb21wYW5pb24gdHVybmVkIGludG8gYSBzZXJpb3VzIGRlc2lyZSB0byB1bmRlcnN0YW5kIGhpbSBiZXR0ZXIuCgoiSSB3aXNoIHlvdSdkIHRlbGwgbWUgaG93IGl0IGhhcHBlbmVkLCIgSSBzYWlkLgoKSGUgc3Rvb2QgbG9va2luZyB1cCBhdCB0aGUgc2tldGNoLCBhbmQgdHdpcmxpbmcgYmV0d2VlbiBoaXMgZmluZ2VycyBhIGNpZ2FyZXR0ZSBoZSBoYWQgZm9yZ290dGVuIHRvIGxpZ2h0LiBTdWRkZW5seSBoZSB0dXJuZWQgdG93YXJkIG1lLgoKIkknZCByYXRoZXIgbGlrZSB0byB0ZWxsIHlvdS0tYmVjYXVzZSBJJ3ZlIGFsd2F5cyBzdXNwZWN0ZWQgeW91IG9mIGxvYXRoaW5nIG15IHdvcmsuIgoKSSBtYWRlIGEgZGVwcmVjYXRpbmcgZ2VzdHVyZSwgd2hpY2ggaGUgbmVnYXRpdmVkIHdpdGggYSBnb29kLWh1bW91cmVkIHNocnVnLgoKIk9oLCBJIGRpZG4ndCBjYXJlIGEgc3RyYXcgd2hlbiBJIGJlbGlldmVkIGluIG15c2VsZi0tYW5kIG5vdyBpdCdzIGFuIGFkZGVkIHRpZSBiZXR3ZWVuIHVzISIKCkhlIGxhdWdoZWQgc2xpZ2h0bHksIHdpdGhvdXQgYml0dGVybmVzcywgYW5kIHB1c2hlZCBvbmUgb2YgdGhlIGRlZXAgYXJtLWNoYWlycyBmb3J3YXJkLiAiVGhlcmU6IG1ha2UgeW91cnNlbGYgY29tZm9ydGFibGUtLWFuZCBoZXJlIGFyZSB0aGUgY2lnYXJzIHlvdSBsaWtlLiIKCkhlIHBsYWNlZCB0aGVtIGF0IG15IGVsYm93IGFuZCBjb250aW51ZWQgdG8gd2FuZGVyIHVwIGFuZCBkb3duIHRoZSByb29tLCBzdG9wcGluZyBub3cgYW5kIHRoZW4gYmVuZWF0aCB0aGUgcGljdHVyZS4KCiJIb3cgaXQgaGFwcGVuZWQ/IEkgY2FuIHRlbGwgeW91IGluIGZpdmUgbWludXRlcy0tYW5kIGl0IGRpZG4ndCB0YWtlIG11Y2ggbG9uZ2VyIHRvIGhhcHBlbi4gLiAuIC4gSSBjYW4gcmVtZW1iZXIgbm93IGhvdyBzdXJwcmlzZWQgYW5kIHBsZWFzZWQgSSB3YXMgd2hlbiBJIGdvdCBNcnMuIFN0cm91ZCdzIG5vdGUuIE9mIGNvdXJzZSwgZGVlcCBkb3duLCBJIGhhZCBhbHdheXMgX2ZlbHRfIHRoZXJlIHdhcyBubyBvbmUgbGlrZSBoaW0tLW9ubHkgSSBoYWQgZ29uZSB3aXRoIHRoZSBzdHJlYW0sIGVjaG9lZCB0aGUgdXN1YWwgcGxhdGl0dWRlcyBhYm91dCBoaW0sIHRpbGwgSSBoYWxmIGdvdCB0byB0aGluayBoZSB3YXMgYSBmYWlsdXJlLCBvbmUgb2YgdGhlIGtpbmQgdGhhdCBhcmUgbGVmdCBiZWhpbmQuIEJ5IEpvdmUsIGFuZCBoZSBfd2FzXyBsZWZ0IGJlaGluZC0tYmVjYXVzZSBoZSBoYWQgY29tZSB0byBzdGF5ISBUaGUgcmVzdCBvZiB1cyBoYWQgdG8gbGV0IG91cnNlbHZlcyBiZSBzd2VwdCBhbG9uZyBvciBnbyB1bmRlciwgYnV0IGhlIHdhcyBoaWdoIGFib3ZlIHRoZSBjdXJyZW50LS1vbiBldmVybGFzdGluZyBmb3VuZGF0aW9ucywgYXMgeW91IHNheS4KCiJXZWxsLCBJIHdlbnQgb2ZmIHRvIHRoZSBob3VzZSBpbiBteSBtb3N0IGVncmVnaW91cyBtb29kLS1yYXRoZXIgbW92ZWQsIExvcmQgZm9yZ2l2ZSBtZSwgYXQgdGhlIHBhdGhvcyBvZiBwb29yIFN0cm91ZCdzIGNhcmVlciBvZiBmYWlsdXJlIGJlaW5nIGNyb3duZWQgYnkgdGhlIGdsb3J5IG9mIG15IHBhaW50aW5nIGhpbSEgT2YgY291cnNlIEkgbWVhbnQgdG8gZG8gdGhlIHBpY3R1cmUgZm9yIG5vdGhpbmctLUkgdG9sZCBNcnMuIFN0cm91ZCBzbyB3aGVuIHNoZSBiZWdhbiB0byBzdGFtbWVyIHNvbWV0aGluZyBhYm91dCBoZXIgcG92ZXJ0eS4gSSByZW1lbWJlciBnZXR0aW5nIG9mZiBhIHByb2RpZ2lvdXMgcGhyYXNlIGFib3V0IHRoZSBob25vdXIgYmVpbmcgX21pbmVfLS1vaCwgSSB3YXMgcHJpbmNlbHksIG15IGRlYXIgUmlja2hhbSEgSSB3YXMgcG9zaW5nIHRvIG15c2VsZiBsaWtlIG9uZSBvZiBteSBvd24gc2l0dGVycy4KCiJUaGVuIEkgd2FzIHRha2VuIHVwIGFuZCBsZWZ0IGFsb25lIHdpdGggaGltLiBJIGhhZCBzZW50IGFsbCBteSB0cmFwcyBpbiBhZHZhbmNlLCBhbmQgSSBoYWQgb25seSB0byBzZXQgdXAgdGhlIGVhc2VsIGFuZCBnZXQgdG8gd29yay4gSGUgaGFkIGJlZW4gZGVhZCBvbmx5IHR3ZW50eS1mb3VyIGhvdXJzLCBhbmQgaGUgZGllZCBzdWRkZW5seSwgb2YgaGVhcnQgZGlzZWFzZSwgc28gdGhhdCB0aGVyZSBoYWQgYmVlbiBubyBwcmVsaW1pbmFyeSB3b3JrIG9mIGRlc3RydWN0aW9uLS1oaXMgZmFjZSB3YXMgY2xlYXIgYW5kIHVudG91Y2hlZC4gSSBoYWQgbWV0IGhpbSBvbmNlIG9yIHR3aWNlLCB5ZWFycyBiZWZvcmUsIGFuZCB0aG91Z2h0IGhpbSBpbnNpZ25pZmljYW50IGFuZCBkaW5neS4gTm93IEkgc2F3IHRoYXQgaGUgd2FzIHN1cGVyYi4KCiJJIHdhcyBnbGFkIGF0IGZpcnN0LCB3aXRoIGEgbWVyZWx5IGFlc3RoZXRpYyBzYXRpc2ZhY3Rpb246IGdsYWQgdG8gaGF2ZSBteSBoYW5kIG9uIHN1Y2ggYSAnc3ViamVjdC4nIFRoZW4gaGlzIHN0cmFuZ2UgbGlmZS1saWtlbmVzcyBiZWdhbiB0byBhZmZlY3QgbWUgcXVlZXJseS0tYXMgSSBibG9ja2VkIHRoZSBoZWFkIGluIEkgZmVsdCBhcyBpZiBoZSB3ZXJlIHdhdGNoaW5nIG1lIGRvIGl0LiBUaGUgc2Vuc2F0aW9uIHdhcyBmb2xsb3dlZCBieSB0aGUgdGhvdWdodDogaWYgaGUgX3dlcmVfIHdhdGNoaW5nIG1lLCB3aGF0IHdvdWxkIGhlIHNheSB0byBteSB3YXkgb2Ygd29ya2luZz8gTXkgc3Ryb2tlcyBiZWdhbiB0byBnbyBhIGxpdHRsZSB3aWxkLS1JIGZlbHQgbmVydm91cyBhbmQgdW5jZXJ0YWluLgoKIk9uY2UsIHdoZW4gSSBsb29rZWQgdXAsIEkgc2VlbWVkIHRvIHNlZSBhIHNtaWxlIGJlaGluZCBoaXMgY2xvc2UgZ3JheWlzaCBiZWFyZC0tYXMgaWYgaGUgaGFkIHRoZSBzZWNyZXQsIGFuZCB3ZXJlIGFtdXNpbmcgaGltc2VsZiBieSBob2xkaW5nIGl0IGJhY2sgZnJvbSBtZS4gVGhhdCBleGFzcGVyYXRlZCBtZSBzdGlsbCBtb3JlLiBUaGUgc2VjcmV0PyBXaHksIEkgaGFkIGEgc2VjcmV0IHdvcnRoIHR3ZW50eSBvZiBoaXMhIEkgZGFzaGVkIGF0IHRoZSBjYW52YXMgZnVyaW91c2x5LCBhbmQgdHJpZWQgc29tZSBvZiBteSBicmF2dXJhIHRyaWNrcy4gQnV0IHRoZXkgZmFpbGVkIG1lLCB0aGV5IGNydW1ibGVkLiBJIHNhdyB0aGF0IGhlIHdhc24ndCB3YXRjaGluZyB0aGUgc2hvd3kgYml0cy0tSSBjb3VsZG4ndCBkaXN0cmFjdCBoaXMgYXR0ZW50aW9uOyBoZSBqdXN0IGtlcHQgaGlzIGV5ZXMgb24gdGhlIGhhcmQgcGFzc2FnZXMgYmV0d2Vlbi4gVGhvc2Ugd2VyZSB0aGUgb25lcyBJIGhhZCBhbHdheXMgc2hpcmtlZCwgb3IgY292ZXJlZCB1cCB3aXRoIHNvbWUgbHlpbmcgcGFpbnQuIEFuZCBob3cgaGUgc2F3IHRocm91Z2ggbXkgbGllcyEKCiJJIGxvb2tlZCB1cCBhZ2FpbiwgYW5kIGNhdWdodCBzaWdodCBvZiB0aGF0IHNrZXRjaCBvZiB0aGUgZG9ua2V5IGhhbmdpbmcgb24gdGhlIHdhbGwgbmVhciBoaXMgYmVkLiBIaXMgd2lmZSB0b2xkIG1lIGFmdGVyd2FyZCBpdCB3YXMgdGhlIGxhc3QgdGhpbmcgaGUgaGFkIGRvbmUtLWp1c3QgYSBub3RlIHRha2VuIHdpdGggYSBzaGFraW5nIGhhbmQsIHdoZW4gaGUgd2FzIGRvd24gaW4gRGV2b25zaGlyZSByZWNvdmVyaW5nIGZyb20gYSBwcmV2aW91cyBoZWFydCBhdHRhY2suIEp1c3QgYSBub3RlISBCdXQgaXQgdGVsbHMgaGlzIHdob2xlIGhpc3RvcnkuIFRoZXJlIGFyZSB5ZWFycyBvZiBwYXRpZW50IHNjb3JuZnVsIHBlcnNpc3RlbmNlIGluIGV2ZXJ5IGxpbmUuIEEgbWFuIHdobyBoYWQgc3d1bSB3aXRoIHRoZSBjdXJyZW50IGNvdWxkIG5ldmVyIGhhdmUgbGVhcm5lZCB0aGF0IG1pZ2h0eSB1cC1zdHJlYW0gc3Ryb2tlLiAuIC4gLgoKIkkgdHVybmVkIGJhY2sgdG8gbXkgd29yaywgYW5kIHdlbnQgb24gZ3JvcGluZyBhbmQgbXVkZGxpbmc7IHRoZW4gSSBsb29rZWQgYXQgdGhlIGRvbmtleSBhZ2Fpbi4gSSBzYXcgdGhhdCwgd2hlbiBTdHJvdWQgbGFpZCBpbiB0aGUgZmlyc3Qgc3Ryb2tlLCBoZSBrbmV3IGp1c3Qgd2hhdCB0aGUgZW5kIHdvdWxkIGJlLiBIZSBoYWQgcG9zc2Vzc2VkIGhpcyBzdWJqZWN0LCBhYnNvcmJlZCBpdCwgcmVjcmVhdGVkIGl0LiBXaGVuIGhhZCBJIGRvbmUgdGhhdCB3aXRoIGFueSBvZiBteSB0aGluZ3M/IFRoZXkgaGFkbid0IGJlZW4gYm9ybiBvZiBtZS0tSSBoYWQganVzdCBhZG9wdGVkIHRoZW0uIC4gLiAuCgoiSGFuZyBpdCwgUmlja2hhbSwgd2l0aCB0aGF0IGZhY2Ugd2F0Y2hpbmcgbWUgSSBjb3VsZG4ndCBkbyBhbm90aGVyIHN0cm9rZS4gVGhlIHBsYWluIHRydXRoIHdhcywgSSBkaWRuJ3Qga25vdyB3aGVyZSB0byBwdXQgaXQtLV9JIGhhZCBuZXZlciBrbm93bl8uIE9ubHksIHdpdGggbXkgc2l0dGVycyBhbmQgbXkgcHVibGljLCBhIHNob3d5IHNwbGFzaCBvZiBjb2xvdXIgY292ZXJlZCB1cCB0aGUgZmFjdC0tSSBqdXN0IHRocmV3IHBhaW50IGludG8gdGhlaXIgZmFjZXMuIC4gLiAuIFdlbGwsIHBhaW50IHdhcyB0aGUgb25lIG1lZGl1bSB0aG9zZSBkZWFkIGV5ZXMgY291bGQgc2VlIHRocm91Z2gtLXNlZSBzdHJhaWdodCB0byB0aGUgdG90dGVyaW5nIGZvdW5kYXRpb25zIHVuZGVybmVhdGguIERvbid0IHlvdSBrbm93IGhvdywgaW4gdGFsa2luZyBhIGZvcmVpZ24gbGFuZ3VhZ2UsIGV2ZW4gZmx1ZW50bHksIG9uZSBzYXlzIGhhbGYgdGhlIHRpbWUgbm90IHdoYXQgb25lIHdhbnRzIHRvIGJ1dCB3aGF0IG9uZSBjYW4/IFdlbGwtLXRoYXQgd2FzIHRoZSB3YXkgSSBwYWludGVkOyBhbmQgYXMgaGUgbGF5IHRoZXJlIGFuZCB3YXRjaGVkIG1lLCB0aGUgdGhpbmcgdGhleSBjYWxsZWQgbXkgJ3RlY2huaXF1ZScgY29sbGFwc2VkIGxpa2UgYSBob3VzZSBvZiBjYXJkcy4gSGUgZGlkbid0IHNuZWVyLCB5b3UgdW5kZXJzdGFuZCwgcG9vciBTdHJvdWQtLWhlIGp1c3QgbGF5IHRoZXJlIHF1aWV0bHkgd2F0Y2hpbmcsIGFuZCBvbiBoaXMgbGlwcywgdGhyb3VnaCB0aGUgZ3JheSBiZWFyZCwgSSBzZWVtZWQgdG8gaGVhciB0aGUgcXVlc3Rpb246ICdBcmUgeW91IHN1cmUgeW91IGtub3cgd2hlcmUgeW91J3JlIGNvbWluZyBvdXQ/JwoKIklmIEkgY291bGQgaGF2ZSBwYWludGVkIHRoYXQgZmFjZSwgd2l0aCB0aGF0IHF1ZXN0aW9uIG9uIGl0LCBJIHNob3VsZCBoYXZlIGRvbmUgYSBncmVhdCB0aGluZy4gVGhlIG5leHQgZ3JlYXRlc3QgdGhpbmcgd2FzIHRvIHNlZSB0aGF0IEkgY291bGRuJ3QtLWFuZCB0aGF0IGdyYWNlIHdhcyBnaXZlbiBtZS4gQnV0LCBvaCwgYXQgdGhhdCBtaW51dGUsIFJpY2toYW0sIHdhcyB0aGVyZSBhbnl0aGluZyBvbiBlYXJ0aCBJIHdvdWxkbid0IGhhdmUgZ2l2ZW4gdG8gaGF2ZSBTdHJvdWQgYWxpdmUgYmVmb3JlIG1lLCBhbmQgdG8gaGVhciBoaW0gc2F5OiAnSXQncyBub3QgdG9vIGxhdGUtLUknbGwgc2hvdyB5b3UgaG93Jz8KCiJJdCBfd2FzXyB0b28gbGF0ZS0taXQgd291bGQgaGF2ZSBiZWVuLCBldmVuIGlmIGhlJ2QgYmVlbiBhbGl2ZS4gSSBwYWNrZWQgdXAgbXkgdHJhcHMsIGFuZCB3ZW50IGRvd24gYW5kIHRvbGQgTXJzLiBTdHJvdWQuIE9mIGNvdXJzZSBJIGRpZG4ndCB0ZWxsIGhlciBfdGhhdF8tLWl0IHdvdWxkIGhhdmUgYmVlbiBHcmVlayB0byBoZXIuIEkgc2ltcGx5IHNhaWQgSSBjb3VsZG4ndCBwYWludCBoaW0sIHRoYXQgSSB3YXMgdG9vIG1vdmVkLiBTaGUgcmF0aGVyIGxpa2VkIHRoZSBpZGVhLS1zaGUncyBzbyByb21hbnRpYyEgSXQgd2FzIHRoYXQgdGhhdCBtYWRlIGhlciBnaXZlIG1lIHRoZSBkb25rZXkuIEJ1dCBzaGUgd2FzIHRlcnJpYmx5IHVwc2V0IGF0IG5vdCBnZXR0aW5nIHRoZSBwb3J0cmFpdC0tc2hlIGRpZCBzbyB3YW50IGhpbSAnZG9uZScgYnkgc29tZSBvbmUgc2hvd3khIEF0IGZpcnN0IEkgd2FzIGFmcmFpZCBzaGUgd291bGRuJ3QgbGV0IG1lIG9mZi0tYW5kIGF0IG15IHdpdHMnIGVuZCBJIHN1Z2dlc3RlZCBHcmluZGxlLiBZZXMsIGl0IHdhcyBJIHdobyBzdGFydGVkIEdyaW5kbGU6IEkgdG9sZCBNcnMuIFN0cm91ZCBoZSB3YXMgdGhlICdjb21pbmcnIG1hbiwgYW5kIHNoZSB0b2xkIHNvbWVib2R5IGVsc2UsIGFuZCBzbyBpdCBnb3QgdG8gYmUgdHJ1ZS4gLiAuIC4gQW5kIGhlIHBhaW50ZWQgU3Ryb3VkIHdpdGhvdXQgd2luY2luZzsgYW5kIHNoZSBodW5nIHRoZSBwaWN0dXJlIGFtb25nIGhlciBodXNiYW5kJ3MgdGhpbmdzLiAuIC4gLiIKCkhlIGZsdW5nIGhpbXNlbGYgZG93biBpbiB0aGUgYXJtLWNoYWlyIG5lYXIgbWluZSwgbGFpZCBiYWNrIGhpcyBoZWFkLCBhbmQgY2xhc3BpbmcgaGlzIGFybXMgYmVuZWF0aCBpdCwgbG9va2VkIHVwIGF0IHRoZSBwaWN0dXJlIGFib3ZlIHRoZSBjaGltbmV5LXBpZWNlLgoKIkkgbGlrZSB0byBmYW5jeSB0aGF0IFN0cm91ZCBoaW1zZWxmIHdvdWxkIGhhdmUgZ2l2ZW4gaXQgdG8gbWUsIGlmIGhlJ2QgYmVlbiBhYmxlIHRvIHNheSB3aGF0IGhlIHRob3VnaHQgdGhhdCBkYXkuIgoKQW5kLCBpbiBhbnN3ZXIgdG8gYSBxdWVzdGlvbiBJIHB1dCBoYWxmLW1lY2hhbmljYWxseS0tIkJlZ2luIGFnYWluPyIgaGUgZmxhc2hlZCBvdXQuICJXaGVuIHRoZSBvbmUgdGhpbmcgdGhhdCBicmluZ3MgbWUgYW55d2hlcmUgbmVhciBoaW0gaXMgdGhhdCBJIGtuZXcgZW5vdWdoIHRvIGxlYXZlIG9mZj8iCgpIZSBzdG9vZCB1cCBhbmQgbGFpZCBoaXMgaGFuZCBvbiBteSBzaG91bGRlciB3aXRoIGEgbGF1Z2guICJPbmx5IHRoZSBpcm9ueSBvZiBpdCBpcyB0aGF0IEkgX2FtXyBzdGlsbCBwYWludGluZy0tc2luY2UgR3JpbmRsZSdzIGRvaW5nIGl0IGZvciBtZSEgVGhlIFN0cm91ZHMgc3RhbmQgYWxvbmUsIGFuZCBoYXBwZW4gb25jZS0tYnV0IHRoZXJlJ3Mgbm8gZXh0ZXJtaW5hdGluZyBvdXIga2luZCBvZiBhcnQuIgo=");
+
+const TOKEN_SPLIT_RE = /([,.:;?_!"()']|--|\s)/;
+function regexTokenize(text){
+  return text.split(TOKEN_SPLIT_RE).map(s=>s.trim()).filter(Boolean);
+}
+function isPunct(tok){
+  return /^([,.:;?_!"()']|--)$/.test(tok);
+}
+function decodeJoin(tokens){
+  let text = tokens.join(' ');
+  return text.replace(/\s+([,.:;?!"()'])/g, '$1');
+}
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function randn(rand){
+  const u = 1 - rand(), v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function buildMatrix(rows, cols, seed){
+  const rand = mulberry32(seed);
+  const m = [];
+  for(let i=0;i<rows;i++){
+    const row=[];
+    for(let j=0;j<cols;j++) row.push(randn(rand));
+    m.push(row);
+  }
+  return m;
+}
+function cellColor(v){
+  const c = Math.max(-2.5, Math.min(2.5, v));
+  const alpha = Math.abs(c)/2.5*0.55 + 0.06;
+  return c>=0 ? `rgba(76,195,138,${alpha.toFixed(2)})` : `rgba(91,157,255,${alpha.toFixed(2)})`;
+}
+function fmt(v){ return v.toFixed(3); }
+
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(text !== undefined) e.textContent = text;
+  return e;
+}
+
+// ---------- Tabs ----------
+document.getElementById('tabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-step]');
+  if(!btn) return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById(btn.dataset.step).classList.add('active');
+});
+
+// ---------- 2.2 ----------
+function render22(){
+  const text = document.getElementById('sharedText').value;
+  document.getElementById('s22-raw').textContent = text;
+
+  const rawSplit = text.split(TOKEN_SPLIT_RE);
+  const rawBox = document.getElementById('s22-raw-split');
+  rawBox.innerHTML = '';
+  rawSplit.forEach(tok=>{
+    const trimmed = tok.trim();
+    const chip = el('span', 'chip ' + (trimmed==='' ? 'empty' : (isPunct(trimmed) ? 'punct' : 'word')), trimmed==='' ? '∅' : tok);
+    rawBox.appendChild(chip);
+  });
+
+  const tokens = regexTokenize(text);
+  const finalBox = document.getElementById('s22-final');
+  finalBox.innerHTML = '';
+  tokens.forEach(tok=>{
+    finalBox.appendChild(el('span', 'chip ' + (isPunct(tok)?'punct':'word'), tok));
+  });
+  document.getElementById('s22-count').textContent = tokens.length + ' tokens';
+  return tokens;
+}
+
+// ---------- 2.3 ----------
+let vocab23 = {}, sortedVocab23 = [];
+function buildVocab(corpusText){
+  const tokens = regexTokenize(corpusText);
+  const unique = Array.from(new Set(tokens)).sort();
+  const v = {};
+  unique.forEach((t,i)=> v[t]=i);
+  return {tokens, vocab:v, unique};
+}
+function renderVocabTable(filter){
+  const tbody = document.getElementById('s23-vocabtable');
+  tbody.innerHTML = '';
+  const f = (filter||'').trim().toLowerCase();
+  let shown = 0;
+  for(const tok of sortedVocab23){
+    const id = vocab23[tok];
+    if(f && !tok.toLowerCase().includes(f) && String(id) !== f) continue;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${id}</td><td>${tok.replace(/</g,'&lt;')}</td>`;
+    tbody.appendChild(tr);
+    shown++;
+    if(shown > 400) break;
+  }
+}
+function render23(){
+  const corpus = document.getElementById('s23-corpus').value;
+  const built = buildVocab(corpus);
+  vocab23 = built.vocab; sortedVocab23 = built.unique;
+  document.getElementById('s23-tokcount').textContent = built.tokens.length;
+  document.getElementById('s23-vocabsize').textContent = built.unique.length;
+  renderVocabTable(document.getElementById('s23-search').value);
+
+  const text = document.getElementById('sharedText').value;
+  const tokens = regexTokenize(text);
+  const box = document.getElementById('s23-encoded');
+  box.innerHTML = '';
+  tokens.forEach(tok=>{
+    const inVocab = Object.prototype.hasOwnProperty.call(vocab23, tok);
+    const chip = el('span', 'chip ' + (inVocab ? (isPunct(tok)?'punct':'word') : 'oov'));
+    chip.appendChild(el('span', null, tok));
+    chip.appendChild(el('span', 'sub', inVocab ? ('id ' + vocab23[tok]) : 'not in vocab'));
+    box.appendChild(chip);
+  });
+}
+
+// ---------- 2.4 ----------
+function render24(){
+  const corpus = document.getElementById('s23-corpus').value;
+  const built = buildVocab(corpus);
+  const vocab2 = Object.assign({}, built.vocab);
+  const nextId = built.unique.length;
+  vocab2['<|endoftext|>'] = nextId;
+  vocab2['<|unk|>'] = nextId + 1;
+  document.getElementById('s24-vocabsize').textContent = nextId + 2;
+
+  const text = document.getElementById('sharedText').value;
+  const tokens = regexTokenize(text);
+  const box = document.getElementById('s24-encoded');
+  box.innerHTML = '';
+  const decodedTokens = [];
+  tokens.forEach(tok=>{
+    const known = Object.prototype.hasOwnProperty.call(vocab2, tok);
+    const useTok = known ? tok : '<|unk|>';
+    decodedTokens.push(useTok);
+    const chip = el('span', 'chip ' + (known ? (isPunct(tok)?'punct':'word') : 'unk'));
+    chip.appendChild(el('span', null, tok === '<|endoftext|>' ? tok : tok));
+    chip.appendChild(el('span', 'sub', 'id ' + vocab2[useTok]));
+    box.appendChild(chip);
+  });
+  document.getElementById('s24-decoded').textContent = decodeJoin(decodedTokens);
+}
+
+// ---------- 2.5 (BPE) ----------
+let bpeApi = null;
+const FALLBACK_BPE = {
+  text: "Hello, do you like tea? <|endoftext|> In the sunlit terraces of someunknownPlace.",
+  ids: [15496, 11, 466, 345, 588, 8887, 30, 220, 50256, 554, 262, 4252, 18250, 8812, 2114, 286, 617, 34680, 27271, 13],
+  pieces: ["Hello", ",", " do", " you", " like", " tea", "?", " ", "<|endoftext|>", " In", " the", " sun", "lit", " terr", "aces", " of", " some", "unknown", "Place", "."]
+};
+let usingFallback = false;
+let lastBpe = { ids: FALLBACK_BPE.ids, pieces: FALLBACK_BPE.pieces };
+
+async function loadBpe(){
+  const dot = document.getElementById('s25-status-dot');
+  const status = document.getElementById('s25-status');
+  try{
+    const mod = await import('https://esm.sh/gpt-tokenizer@2.6.2/encoding/r50k_base');
+    bpeApi = mod;
+    dot.classList.add('ok');
+    status.textContent = 'GPT-2 tokenizer loaded — live BPE below is computed in your browser.';
+  }catch(err){
+    usingFallback = true;
+    dot.classList.add('err');
+    status.textContent = 'Could not load live tokenizer (no network?). Using the notebook\'s precomputed example.';
+    document.getElementById('s25-fallback-note').style.display = 'block';
+  }
+  render25();
+}
+
+function piecesToChips(pieces){
+  return pieces.map(p => p.startsWith(' ') ? ('·' + p.slice(1)) : p);
+}
+
+function render25(){
+  const text = document.getElementById('sharedText').value;
+  let ids, pieces;
+  if(bpeApi && !usingFallback){
+    try{
+      ids = bpeApi.encode(text, { allowedSpecial: new Set(['<|endoftext|>']) });
+    }catch(e){
+      try{ ids = bpeApi.encode(text); }catch(e2){ ids = null; }
+    }
+    if(ids){
+      pieces = ids.map(id => bpeApi.decode([id]));
+    }
+  }
+  if(!ids){
+    if(text === FALLBACK_BPE.text || !bpeApi){
+      ids = FALLBACK_BPE.ids; pieces = FALLBACK_BPE.pieces;
+    } else {
+      // no live tokenizer and custom text: best effort, fall back to regex tokens as a stand-in
+      pieces = regexTokenize(text); ids = pieces.map((_,i)=>i);
+    }
+  }
+  lastBpe = { ids, pieces };
+
+  const box = document.getElementById('s25-pieces');
+  box.innerHTML = '';
+  const displayPieces = piecesToChips(pieces);
+  pieces.forEach((p,i)=>{
+    const chip = el('span', 'chip word');
+    chip.appendChild(el('span', null, displayPieces[i] === '' ? '⏎' : displayPieces[i]));
+    chip.appendChild(el('span', 'sub', String(ids[i])));
+    box.appendChild(chip);
+  });
+  document.getElementById('s25-count').textContent = ids.length;
+  document.getElementById('s25-word-count').textContent = regexTokenize(text).length;
+
+  let decoded = pieces.join('');
+  if(bpeApi && !usingFallback){
+    try{ decoded = bpeApi.decode(ids); }catch(e){}
+  }
+  document.getElementById('s25-decoded').textContent = decoded;
+  const match = document.getElementById('s25-match');
+  if(decoded === text){
+    match.innerHTML = '<span class="badge green">exact match ✓</span> nothing was lost — unlike the &lt;|unk|&gt; tokenizer above.';
+  } else {
+    match.innerHTML = '<span class="badge amber">differs</span> (only expected if the live tokenizer isn\'t loaded for custom text)';
+  }
+  render26();
+}
+
+// ---------- 2.6 ----------
+function slidingWindows(ids, maxLen, stride){
+  const out = [];
+  for(let i=0; i + maxLen < ids.length; i += stride){
+    out.push({ i, x: ids.slice(i, i+maxLen), y: ids.slice(i+1, i+maxLen+1) });
+  }
+  return out;
+}
+let s26State = { idx: 0 };
+function render26(){
+  const maxLen = parseInt(document.getElementById('s26-maxlen').value, 10);
+  const stride = parseInt(document.getElementById('s26-stride').value, 10);
+  document.getElementById('s26-maxlen-val').textContent = maxLen;
+  document.getElementById('s26-stride-val').textContent = stride;
+
+  const { ids, pieces } = lastBpe;
+  const disp = piecesToChips(pieces);
+  const windows = slidingWindows(ids, maxLen, stride);
+  s26State.windows = windows;
+  if(s26State.idx >= windows.length) s26State.idx = Math.max(0, windows.length-1);
+
+  const stream = document.getElementById('s26-stream');
+  stream.innerHTML = '';
+  const cur = windows[s26State.idx];
+  ids.forEach((id, pos)=>{
+    let cls = 'chip word';
+    if(cur){
+      if(pos >= cur.i && pos < cur.i+maxLen) cls += ' input-hl';
+      if(pos > cur.i && pos <= cur.i+maxLen) cls += ' target';
+    }
+    const chip = el('span', cls);
+    chip.appendChild(el('span', null, disp[pos]));
+    chip.appendChild(el('span', 'sub', String(pos)));
+    stream.appendChild(chip);
+  });
+
+  document.getElementById('s26-idx').textContent = windows.length ? `window ${s26State.idx+1} / ${windows.length}` : 'no windows fit — shorten stride/max_length or lengthen the sentence';
+  document.getElementById('s26-x').textContent = cur ? `[${cur.x.join(', ')}]  → "${cur.x.map(id=>pieces[ids.indexOf(id)]).join('')}"` : '–';
+  document.getElementById('s26-y').textContent = cur ? `[${cur.y.join(', ')}]` : '–';
+  document.getElementById('s26-prev').disabled = s26State.idx <= 0;
+  document.getElementById('s26-next').disabled = s26State.idx >= windows.length-1;
+
+  const tbody = document.getElementById('s26-table');
+  tbody.innerHTML = '';
+  windows.forEach(w=>{
+    const tr = document.createElement('tr');
+    const xt = w.x.map(id => decodePieceForId(id, ids, pieces)).join('');
+    const yt = w.y.map(id => decodePieceForId(id, ids, pieces)).join('');
+    tr.innerHTML = `<td>${w.i}</td><td title="${xt.replace(/"/g,'&quot;')}">[${w.x.join(', ')}]</td><td>→</td><td title="${yt.replace(/"/g,'&quot;')}">[${w.y.join(', ')}]</td>`;
+    tbody.appendChild(tr);
+  });
+}
+function decodePieceForId(id, ids, pieces){
+  const idx = ids.indexOf(id);
+  return idx>=0 ? pieces[idx] : '';
+}
+
+// ---------- 2.7 ----------
+let embMatrix27 = buildMatrix(6, 3, 123);
+function renderMatrixTable(tableEl, matrix, rowLabelPrefix, highlightRows){
+  tableEl.innerHTML = '';
+  const thead = document.createElement('tr');
+  thead.innerHTML = `<th>${rowLabelPrefix}</th>` + matrix[0].map((_,j)=>`<th>dim ${j}</th>`).join('');
+  tableEl.appendChild(thead);
+  matrix.forEach((row,i)=>{
+    const tr = document.createElement('tr');
+    if(highlightRows && highlightRows.includes(i)) tr.style.outline = '2px solid var(--blue)';
+    tr.innerHTML = `<td>${i}</td>` + row.map(v=>`<td class="veccell" style="background:${cellColor(v)}">${fmt(v)}</td>`).join('');
+    tableEl.appendChild(tr);
+  });
+}
+function render27(){
+  renderMatrixTable(document.getElementById('s27-matrix'), embMatrix27, 'id');
+}
+function lookup27(){
+  const raw = document.getElementById('s27-ids').value;
+  const ids = raw.split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n) && n>=0 && n<embMatrix27.length);
+  const rows = ids.map(id=>embMatrix27[id]);
+  const table = document.getElementById('s27-result');
+  table.innerHTML = '';
+  const thead = document.createElement('tr');
+  thead.innerHTML = '<th>input_id</th>' + (rows[0]||[0,0,0]).map((_,j)=>`<th>dim ${j}</th>`).join('');
+  table.appendChild(thead);
+  ids.forEach((id,k)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${id} <span class="muted" style="color:var(--muted)">(row ${id})</span></td>` + rows[k].map(v=>`<td class="veccell" style="background:${cellColor(v)}">${fmt(v)}</td>`).join('');
+    table.appendChild(tr);
+  });
+  renderMatrixTable(document.getElementById('s27-matrix'), embMatrix27, 'id', ids);
+}
+
+// ---------- 2.8 ----------
+let posMatrix28 = buildMatrix(4, 3, 456);
+function render28(){
+  const raw = document.getElementById('s28-ids').value;
+  let ids = raw.split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n));
+  ids = ids.slice(0,4);
+  while(ids.length < 4) ids.push(0);
+  ids = ids.map(id => Math.max(0, Math.min(embMatrix27.length-1, id)));
+
+  const tokEmb = ids.map(id => embMatrix27[id]);
+  const posEmb = posMatrix28;
+  const finalEmb = tokEmb.map((row,i)=> row.map((v,j)=> v + posEmb[i][j]));
+
+  renderMatrixTable(document.getElementById('s28-tok'), tokEmb, 'pos');
+  renderMatrixTable(document.getElementById('s28-pos'), posEmb, 'pos');
+  renderMatrixTable(document.getElementById('s28-final'), finalEmb, 'pos');
+
+  const uniqueIds = new Set(ids);
+  document.getElementById('s28-note').textContent = uniqueIds.size === 1
+    ? `All four positions use id ${ids[0]} — the token embeddings on the left are identical every row, yet the final embeddings on the right differ, purely because each position adds a different position vector.`
+    : `Token ids: [${ids.join(', ')}]. Same id at different positions (try the button above) would still end up with different final vectors.`;
+}
+
+// ---------- wiring ----------
+function renderAll(){
+  render22();
+  render23();
+  render24();
+  render25(); // also triggers render26 and downstream
+}
+
+document.getElementById('sharedText').addEventListener('input', renderAll);
+document.getElementById('s23-corpus').addEventListener('input', ()=>{ render23(); render24(); });
+document.getElementById('s23-search').addEventListener('input', (e)=> renderVocabTable(e.target.value));
+document.getElementById('s23-reset').addEventListener('click', ()=>{ document.getElementById('s23-corpus').value = VERDICT_TEXT; render23(); render24(); });
+
+document.getElementById('s26-maxlen').addEventListener('input', ()=>{ s26State.idx = 0; render26(); });
+document.getElementById('s26-stride').addEventListener('input', ()=>{ s26State.idx = 0; render26(); });
+document.getElementById('s26-prev').addEventListener('click', ()=>{ if(s26State.idx>0){ s26State.idx--; render26(); } });
+document.getElementById('s26-next').addEventListener('click', ()=>{ if(s26State.idx < s26State.windows.length-1){ s26State.idx++; render26(); } });
+
+document.getElementById('s27-lookup').addEventListener('click', lookup27);
+document.getElementById('s28-compute').addEventListener('click', render28);
+document.getElementById('s28-sameid').addEventListener('click', ()=>{ document.getElementById('s28-ids').value = '2, 2, 2, 2'; render28(); });
+
+document.getElementById('s23-corpus').value = VERDICT_TEXT;
+renderAll();
+render27();
+lookup27();
+render28();
+loadBpe();
+</script>
+</body>
+</html>
